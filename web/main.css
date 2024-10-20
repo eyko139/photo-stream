@@ -1,0 +1,35 @@
+body {
+    margin: 0;
+    height: 100%;
+    background-color: #2f3031;
+}
+
+div {
+    color: white;
+}
+
+.active {
+    border: 2px solid green;
+}
+
+.thumbnail-container {
+    display: flex;
+    flex-direction: column;
+    height: 600px;
+    width: 500px;
+    align-items: center;
+}
+
+.thumbnail-header {
+    height: 100px;
+}
+
+.thumbnail {
+    height: 85%;
+    width: 100%;
+}
+
+.section-header {
+    font-size: 30px;
+    margin-bottom: 20px;
+}

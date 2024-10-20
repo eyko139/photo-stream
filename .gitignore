@@ -1,0 +1,5 @@
+photo-stream
+web/pics/*
+web/thumbs/*
+.env
+.envrc
