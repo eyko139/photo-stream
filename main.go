@@ -1,17 +1,21 @@
 package main
 
 import (
-	"github.com/maxence-charriere/go-app/v10/pkg/app"
 	"log"
 	"net/http"
+
+	"github.com/eyko139/photo-stream/internal/api"
+	"github.com/eyko139/photo-stream/internal/env"
+	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
 func main() {
 
-    env := NewEnv()
+    env := env.NewEnv()
 
     mainEntry := NewHello(env)
 
+    api := api.NewApi(env)
 
 	app.Route("/", func() app.Composer {
 		return mainEntry	
@@ -37,9 +41,9 @@ func main() {
 		},
 	})
 
-	http.HandleFunc("/fetchAlbums", mainEntry.FetchAlbums)
-	http.HandleFunc("/fetchThumbnails", mainEntry.FetchThumbnails)
-	http.HandleFunc("/downloadAlbum", mainEntry.DownloadAlbum)
+	http.HandleFunc("/fetchAlbums", api.FetchAlbums())
+	http.HandleFunc("/fetchThumbnails", api.FetchThumbnails())
+	http.HandleFunc("/downloadAlbum", api.DownloadAlbum())
 
 	if err := http.ListenAndServe(":8001", nil); err != nil {
 		log.Fatal(err)

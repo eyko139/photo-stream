@@ -47,3 +47,8 @@ div {
     -o-object-fit: contain;
     object-fit: contain;
 }
+
+.album-list {
+    display: flex;
+    gap: 10px;
+}

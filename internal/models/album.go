@@ -6,4 +6,7 @@ type Album struct {
     Thumb string `json:"Thumb"`
     Title string `json:"Title"`
     Type string `json:"Type"`
+    PhotoCount int `json:"PhotoCount"`
+    ClassName string
+    B64 string  `json:"B64"`
 }

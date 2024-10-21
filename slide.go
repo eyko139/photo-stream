@@ -2,9 +2,6 @@ package main
 
 import (
 	"time"
-
-	"fmt"
-
 	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
@@ -32,28 +29,30 @@ func (sh *SlideShow) Render() app.UI {
 }
 
 func (sh *SlideShow) OnMount(ctx app.Context) {
-	var test []string
+	var images []string
 	sh.IsLoading = true
-	ctx.GetState("images", &test)
-	fmt.Println("images slide observed", test)
-	// ctx.ObserveState("images", &test).OnChange(func() {
-	// fmt.Println("images slide observed")
-	// app.Logf("images slide observed", test)
-	// 	if len(test) > 0 {
-	// 		// sh.Images = test
-	// 		sh.IsLoading = false
 
-	if len(test) > 0 {
-		sh.Images = test
+	ctx.GetState("images", &images)
+
+    if len(images) == 0 {
+        app.Logf("No pictures in local storage")
+    }
+
+	if len(images) > 0 {
+		sh.Images = images
 		sh.IsLoading = false
 	}
+
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		currentImage := 0
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
+                if currentImage == len(images)-1 {
+                    currentImage = -1
+                }
 				currentImage++
 				ctx.Dispatch(func(ctx app.Context) {
 					sh.CurrentImage = currentImage
