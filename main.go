@@ -17,6 +17,10 @@ func main() {
 		return mainEntry	
     })
 
+    app.Route("/slide", func() app.Composer {
+        return &SlideShow{IsLoading: true }
+    })
+
 	app.RunWhenOnBrowser()
 
 	// Finally, launching the server that serves the app is done by using the Go

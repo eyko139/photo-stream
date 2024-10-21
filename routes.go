@@ -20,7 +20,7 @@ import (
 // embedding app.Compo into a struct.
 type hello struct {
 	app.Compo
-    env *Env
+	env               *Env
 	ThumbNails        []ThumbNail
 	ShouldReRender    bool
 	isUpdateAvailable bool
@@ -29,6 +29,7 @@ type hello struct {
 	DownloadToken     string
 	Images            []string
 	ImagesAvailable   bool
+	CurrentImage      int
 }
 
 type ThumbNail struct {
@@ -40,8 +41,9 @@ type ThumbNail struct {
 
 func NewHello(env *Env) *hello {
 	return &hello{
-		Text: "Hello World!",
-        env: env,
+		Text:   "Hello World!",
+		env:    env,
+		Images: []string{},
 	}
 }
 
@@ -49,7 +51,7 @@ func NewHello(env *Env) *hello {
 // "Hello World!" is displayed as a heading.
 func (h *hello) Render() app.UI {
 
-	app.Logf("images: %s", h.Images)
+	// app.Logf("images: %s", h.Images)
 
 	return app.Div().Body(
 		app.Div().Class("section-header").Text("Select albums"),
@@ -63,12 +65,13 @@ func (h *hello) Render() app.UI {
 			}),
 		),
 		app.Button().Text("Play").OnClick(h.onClickPlay),
-		app.If(h.ImagesAvailable, func() app.UI {
-			return &SlideShow{
-				CurrentImage: h.Images[0],
-			}
-		}),
+		app.Button().Text("GO").OnClick(h.onClickSlide),
 	)
+}
+
+func (h *hello) onClickSlide(ctx app.Context, e app.Event) {
+	ctx.Navigate("/slide")
+	ctx.SetState("images", h.Images).Persist().Broadcast()
 }
 
 func (h *hello) onClickPlay(ctx app.Context, e app.Event) {
@@ -89,6 +92,7 @@ func (h *hello) onClickPlay(ctx app.Context, e app.Event) {
 
 				ctx.Dispatch(func(ctx app.Context) {
 					h.Images = images
+					h.CurrentImage = 0
 					h.ImagesAvailable = true
 				})
 
@@ -97,6 +101,7 @@ func (h *hello) onClickPlay(ctx app.Context, e app.Event) {
 	}
 
 }
+
 func readZipFile(zf *zip.File) ([]byte, error) {
 	f, err := zf.Open()
 	if err != nil {
@@ -111,7 +116,7 @@ func (h *hello) onClickAlbum(ctx app.Context, e app.Event) {
 	var update []ThumbNail
 	for _, album := range h.ThumbNails {
 		if album.UID == albumClicked {
-			app.Logf("albumClicked: %s,  albumId: %s", albumClicked, album.UID)
+			// app.Logf("albumClicked: %s,  albumId: %s", albumClicked, album.UID)
 			album.ClassName = "active"
 		}
 		update = append(update, album)
@@ -122,7 +127,7 @@ func (h *hello) onClickAlbum(ctx app.Context, e app.Event) {
 }
 
 func (h *hello) FetchAlbums(w http.ResponseWriter, r *http.Request) {
-	req, err := http.NewRequest("GET", h.env.PrismURL + "/api/v1/albums?count=10", nil)
+	req, err := http.NewRequest("GET", h.env.PrismURL+"/api/v1/albums?count=10", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -160,7 +165,7 @@ func (h *hello) FetchThumbnails(w http.ResponseWriter, r *http.Request) {
 	thumbReq, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/albums/%s/t/%s/tile_500", h.env.PrismURL, albumId, downloadToken), nil)
 	thumbReq.Header.Set("X-Auth-Token", "jqGHgo-aXoKSV-muuhiF-Djh1Zu")
 
-	app.Logf("req %+v", thumbReq)
+	// app.Logf("req %+v", thumbReq)
 	thumbRes, err := client.Do(thumbReq)
 	if err != nil {
 		app.Logf("Error fetching thumbnails %s", err)
@@ -184,7 +189,7 @@ func (h *hello) OnMount(ctx app.Context) {
 			app.Logf("cant unmarshall albums")
 		}
 
-		app.Logf("response: %+v", albums)
+		// app.Logf("response: %+v", albums)
 
 		var thumbNailUpdate []ThumbNail
 
@@ -229,7 +234,7 @@ func (h *hello) DownloadAlbum(w http.ResponseWriter, r *http.Request) {
 	albumReq, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/albums/%s/dl?t=%s", h.env.PrismURL, albumId, downloadToken), nil)
 	albumReq.Header.Set("X-Auth-Token", h.env.PrismAuthToken)
 
-	app.Logf("req %+v", albumReq)
+	// app.Logf("req %+v", albumReq)
 	thumbRes, err := client.Do(albumReq)
 	if err != nil {
 		app.Logf("Error downloading album %+v", err)
@@ -244,7 +249,7 @@ func (h *hello) DownloadAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 	images := []string{}
 	for _, zipFile := range zipReader.File {
-		fmt.Println("Reading file:", zipFile.Name)
+		// fmt.Println("Reading file:", zipFile.Name)
 		unzippedFileBytes, err := readZipFile(zipFile)
 		if err != nil {
 			app.Logf("%s", err)
@@ -258,7 +263,7 @@ func (h *hello) DownloadAlbum(w http.ResponseWriter, r *http.Request) {
 			images = append(images, zipFile.Name)
 		}
 	}
-	app.Logf("Returning images: %s", images)
+	// app.Logf("Returning images: %s", images)
 
 	imageBytes, _ := json.Marshal(images)
 
