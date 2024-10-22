@@ -26,8 +26,9 @@ type hello struct {
 	Gallery           *Gallery
 	Text              string
 	DownloadToken     string
-	Images            []string
-	IsLoading         bool
+	images            []string
+	IsLoadingAlbums   bool
+	FetchingError     bool
 }
 
 type ThumbNail struct {
@@ -42,70 +43,63 @@ func NewHello(env *env.Env) *hello {
 	return &hello{
 		Text:   "Hello World!",
 		env:    env,
-		Images: []string{},
+		images: []string{},
 	}
 }
 
-// The Render method is where the component appearance is defined. Here, a
-// "Hello World!" is displayed as a heading.
 func (h *hello) Render() app.UI {
-
 	return app.Div().Body(
-		app.Div().Class("section-header").Text("Select albums"),
-		app.Div().Class("album-list").Body(
-			app.Range(h.Albums).Slice(func(i int) app.UI {
-				item := h.Albums[i]
-				return app.Div().Class("thumbnail-container").Class(item.ClassName).Body(
-					app.Div().Class("thumbnail-header").Body(
-						app.Div().Class("thumbnail-title").Text(item.Title),
-						app.Div().Text("Photos: "+fmt.Sprint(item.PhotoCount)),
-					),
-					app.Img().ID(item.UID).Src(fmt.Sprintf("data:image/jpg;base64, %s", item.B64)).OnClick(h.onClickAlbum),
-				)
-			}),
-		),
+		app.Div().Class("section-header").Text("Photo Slideshow"),
+		app.Div().Class("").Text("Select album(s)"),
+		app.If(h.IsLoadingAlbums, func() app.UI {
+			return &ui.AlbumSkeleton{}
+		}).Else(func() app.UI {
+			return app.Div().Class("album-list").Body(
+				app.Range(h.Albums).Slice(func(i int) app.UI {
+					item := h.Albums[i]
+					return app.Div().Class("thumbnail-container").Class(item.ClassName).Body(
+						app.Div().Class("thumbnail-header").Body(
+							app.Div().Class("thumbnail-title").Text(item.Title),
+							app.Div().Text("Photos: "+fmt.Sprint(item.PhotoCount)),
+						),
+						app.Img().ID(item.UID).Src(fmt.Sprintf("data:image/jpg;base64, %s", item.B64)).OnClick(h.onClickAlbum),
+					)
+				}),
+			)
+		}),
 		app.Div().Class("controls").Body(
-			&ui.DownloadButton{OnClick: h.onClickPlay},
-			app.If(h.IsLoading, func() app.UI {
-				return &ui.LoadingSpinner{}
-			}).ElseIf(len(h.Images) > 0, func() app.UI {
+			&ui.DownloadButton{OnClick: h.onClickDownload},
+			app.If(len(h.images) > 0, func() app.UI {
 				return &ui.StartButton{}
 			}),
 		),
 	)
 }
 
-func (h *hello) onClickPlay(ctx app.Context, e app.Event) {
-
+func (h *hello) onClickDownload(ctx app.Context, e app.Event) {
+	ctx.NewActionWithValue("downloadingPictures", true)
 	ctx.Async(func() {
-
-		ctx.Dispatch(func(ctx app.Context) {
-			h.IsLoading = true
-		})
-
 		var wg sync.WaitGroup
 		var update []string
 		var mutex sync.Mutex
 		for _, selectedThumbnails := range h.Albums {
 			if selectedThumbnails.ClassName == "active" {
 				wg.Add(1)
-				go fetchSingleAlbum(h.DownloadToken, selectedThumbnails.UID, &wg, &update, &mutex)
+				go h.fetchSingleAlbum(h.DownloadToken, selectedThumbnails.UID, &wg, &update, &mutex)
 			}
 		}
 		wg.Wait()
-		ctx.Dispatch(func(ctx app.Context) {
-			h.IsLoading = false
-			h.Images = update
-			duration, _ := time.ParseDuration("99999h")
-			ctx.SetState("images", h.Images).Persist().Broadcast().ExpiresIn(duration)
-		})
+		h.images = update
+		duration, _ := time.ParseDuration("99999h")
+		ctx.SetState("images", h.images).Persist().Broadcast().ExpiresIn(duration)
+		ctx.NewActionWithValue("downloadingPictures", false)
 	})
 }
 
-func fetchSingleAlbum(token, name string, wg *sync.WaitGroup, update *[]string, mutex *sync.Mutex) {
+func (h *hello) fetchSingleAlbum(token, name string, wg *sync.WaitGroup, update *[]string, mutex *sync.Mutex) {
 	defer wg.Done()
 	var images []string
-	res, err := http.Get(fmt.Sprintf("/downloadAlbum?albumId=%s&downloadToken=%s", name, token))
+	res, err := http.Get(fmt.Sprintf("%s/downloadAlbum?albumId=%s&downloadToken=%s", h.env.BaseUrl, name, token))
 	if err != nil {
 		app.Logf("failed to download album")
 	}
@@ -140,10 +134,22 @@ func (h *hello) onClickAlbum(ctx app.Context, e app.Event) {
 
 func (h *hello) OnMount(ctx app.Context) {
 	ctx.Async(func() {
+		ctx.Dispatch(func(ctx app.Context) {
+			h.IsLoadingAlbums = true
+		})
 		var albums []models.Album
-		res, _ := http.Get("/fetchAlbums")
-		bytes, _ := io.ReadAll(res.Body)
-		err := json.Unmarshal(bytes, &albums)
+		res, err := http.Get(h.env.BaseUrl + "/fetchAlbums")
+		bytes, err := io.ReadAll(res.Body)
+
+		if err != nil {
+			app.Logf("Failed to fetch albums")
+			ctx.Dispatch(func(ctx app.Context) {
+				h.FetchingError = true
+				h.IsLoadingAlbums = false
+			})
+		}
+
+		err = json.Unmarshal(bytes, &albums)
 
 		if err != nil {
 			app.Logf("cant unmarshall albums")
@@ -152,14 +158,14 @@ func (h *hello) OnMount(ctx app.Context) {
 		update := removeNonAlbums(albums)
 
 		for idx, album := range update {
-			thumbRes, _ := http.Get(fmt.Sprintf("/fetchThumbnails?albumId=%s&downloadToken=%s", album.UID, res.Header.Get("X-Download-Token")))
+			thumbRes, _ := http.Get(fmt.Sprintf("%s/fetchThumbnails?albumId=%s&downloadToken=%s", h.env.BaseUrl, album.UID, res.Header.Get("X-Download-Token")))
 			thumbBytes, _ := io.ReadAll(thumbRes.Body)
 			base64String := base64.StdEncoding.EncodeToString(thumbBytes)
 			update[idx].B64 = base64String
-			app.Logf("update: %+v", album)
 		}
 
 		ctx.Dispatch(func(ctx app.Context) {
+			h.IsLoadingAlbums = false
 			h.Albums = update
 			h.DownloadToken = res.Header.Get("X-Download-Token")
 		})
@@ -171,7 +177,6 @@ func removeNonAlbums(albums []models.Album) []models.Album {
 	var result []models.Album
 	for _, album := range albums {
 		if album.Type == "album" {
-			app.Logf("base64: %s", album.B64)
 			result = append(result, album)
 		}
 	}

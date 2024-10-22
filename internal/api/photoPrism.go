@@ -39,18 +39,18 @@ func (a *Api) DownloadAlbum() http.HandlerFunc {
 			Timeout: 30 * time.Second,
 		}
 
-		albumReq, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/albums/%s/dl?t=%s", a.env.PrismURL, albumId, downloadToken), nil)
+		albumReq, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/albums/%s/dl?t=%s", a.env.PrismURL, albumId, downloadToken), nil)
 		albumReq.Header.Set("X-Auth-Token", a.env.PrismAuthToken)
 
-		thumbRes, err := client.Do(albumReq)
+		albumRes, err := client.Do(albumReq)
 		if err != nil {
 			app.Logf("Error downloading album %+v", err)
 		}
 
-		defer thumbRes.Body.Close()
-		thumbBytes, err := io.ReadAll(thumbRes.Body)
+		defer albumRes.Body.Close()
+		albumBytes, err := io.ReadAll(albumRes.Body)
 
-		zipReader, err := zip.NewReader(bytes.NewReader(thumbBytes), int64(len(thumbBytes)))
+		zipReader, err := zip.NewReader(bytes.NewReader(albumBytes), int64(len(albumBytes)))
 		if err != nil {
 			app.Logf("failed to write file %s: ", err)
 		}
@@ -59,7 +59,7 @@ func (a *Api) DownloadAlbum() http.HandlerFunc {
 			unzippedFileBytes, err := readZipFile(zipFile)
 			if err != nil {
 				app.Logf("%s", err)
-				continue
+                return
 			}
 
 			err = os.WriteFile(fmt.Sprintf("web/pics/%s", zipFile.Name), unzippedFileBytes, 0666)
@@ -100,7 +100,7 @@ func (a *Api) FetchThumbnails() http.HandlerFunc {
 			Timeout: 30 * time.Second,
 		}
 
-		thumbReq, _ := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/albums/%s/t/%s/tile_500", a.env.PrismURL, albumId, downloadToken), nil)
+		thumbReq, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/albums/%s/t/%s/tile_500", a.env.PrismURL, albumId, downloadToken), nil)
 		thumbReq.Header.Set("X-Auth-Token", "jqGHgo-aXoKSV-muuhiF-Djh1Zu")
 
 		// app.Logf("req %+v", thumbReq)
@@ -111,6 +111,11 @@ func (a *Api) FetchThumbnails() http.HandlerFunc {
 
 		defer thumbRes.Body.Close()
 		thumbBytes, err := io.ReadAll(thumbRes.Body)
+        if err != nil {
+            app.Logf("Failed to read thumbnail response")
+            w.Write([]byte("Fail"))
+            return
+        }
 
 		os.WriteFile(fmt.Sprintf("web/thumbs/%s.jpg", albumId), thumbBytes, 0666)
 		w.Write(thumbBytes)
@@ -119,7 +124,7 @@ func (a *Api) FetchThumbnails() http.HandlerFunc {
 
 func (a *Api) FetchAlbums() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		req, err := http.NewRequest("GET", a.env.PrismURL+"/api/v1/albums?count=10", nil)
+		req, err := http.NewRequest("GET", a.env.PrismURL + "/api/v1/albums?count=10", nil)
 		if err != nil {
 			panic(err)
 		}
