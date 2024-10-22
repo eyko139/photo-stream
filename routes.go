@@ -4,14 +4,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/eyko139/photo-stream/internal/env"
+	"github.com/eyko139/photo-stream/internal/models"
+	"github.com/eyko139/photo-stream/ui"
+	"github.com/maxence-charriere/go-app/v10/pkg/app"
 	"io"
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/eyko139/photo-stream/internal/models"
-	"github.com/eyko139/photo-stream/internal/env"
-	"github.com/maxence-charriere/go-app/v10/pkg/app"
 )
 
 // hello is a component that displays a simple "Hello World!". A component is a
@@ -27,6 +27,7 @@ type hello struct {
 	Text              string
 	DownloadToken     string
 	Images            []string
+	IsLoading         bool
 }
 
 type ThumbNail struct {
@@ -56,36 +57,44 @@ func (h *hello) Render() app.UI {
 				item := h.Albums[i]
 				return app.Div().Class("thumbnail-container").Class(item.ClassName).Body(
 					app.Div().Class("thumbnail-header").Body(
-						app.Div().Text(item.Title),
+						app.Div().Class("thumbnail-title").Text(item.Title),
 						app.Div().Text("Photos: "+fmt.Sprint(item.PhotoCount)),
 					),
 					app.Img().ID(item.UID).Src(fmt.Sprintf("data:image/jpg;base64, %s", item.B64)).OnClick(h.onClickAlbum),
 				)
 			}),
 		),
-		app.Button().Text("Download").OnClick(h.onClickPlay),
-		app.Button().Text("Start").OnClick(h.onClickSlide),
+		app.Div().Class("controls").Body(
+			&ui.DownloadButton{OnClick: h.onClickPlay},
+			app.If(h.IsLoading, func() app.UI {
+				return &ui.LoadingSpinner{}
+			}).ElseIf(len(h.Images) > 0, func() app.UI {
+				return &ui.StartButton{}
+			}),
+		),
 	)
-}
-
-func (h *hello) onClickSlide(ctx app.Context, e app.Event) {
-	ctx.Navigate("/slide")
 }
 
 func (h *hello) onClickPlay(ctx app.Context, e app.Event) {
 
 	ctx.Async(func() {
+
+		ctx.Dispatch(func(ctx app.Context) {
+			h.IsLoading = true
+		})
+
 		var wg sync.WaitGroup
 		var update []string
-        var mutex sync.Mutex
+		var mutex sync.Mutex
 		for _, selectedThumbnails := range h.Albums {
 			if selectedThumbnails.ClassName == "active" {
 				wg.Add(1)
-                go fetchSingleAlbum(h.DownloadToken, selectedThumbnails.UID, &wg, &update, &mutex)
+				go fetchSingleAlbum(h.DownloadToken, selectedThumbnails.UID, &wg, &update, &mutex)
 			}
 		}
 		wg.Wait()
 		ctx.Dispatch(func(ctx app.Context) {
+			h.IsLoading = false
 			h.Images = update
 			duration, _ := time.ParseDuration("99999h")
 			ctx.SetState("images", h.Images).Persist().Broadcast().ExpiresIn(duration)
@@ -106,9 +115,9 @@ func fetchSingleAlbum(token, name string, wg *sync.WaitGroup, update *[]string, 
 	}
 	json.Unmarshal(imageBytes, &images)
 
-    mutex.Lock()
-    *update = append(*update, images...)
-    mutex.Unlock()
+	mutex.Lock()
+	*update = append(*update, images...)
+	mutex.Unlock()
 }
 
 func (h *hello) onClickAlbum(ctx app.Context, e app.Event) {
@@ -116,7 +125,11 @@ func (h *hello) onClickAlbum(ctx app.Context, e app.Event) {
 	var update []models.Album
 	for _, album := range h.Albums {
 		if album.UID == albumClicked {
-			album.ClassName = "active"
+			if album.ClassName == "active" {
+				album.ClassName = ""
+			} else {
+				album.ClassName = "active"
+			}
 		}
 		update = append(update, album)
 	}
